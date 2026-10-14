@@ -1,0 +1,15 @@
+const assert=require('assert');require('../web/core.js');
+const fresh=()=>{let g=new SurvivorGame(()=>.1);g.start();g.spawnClock=999;return g};
+let g=fresh();g.tick(.05,{x:1,y:1});assert(Math.abs(Math.hypot(g.player.x,g.player.y)-9)<.001,'diagonal movement normalized');g.pause();const x=g.player.x;g.tick(.05,{x:1,y:0});assert.equal(g.player.x,x);g.resume();assert.equal(g.mode,'playing');
+g=fresh();g.spawn('goblin',{x:70,y:0});g.player.attackClock=0;g.tick(.05);assert.equal(g.kills,1);assert.equal(g.gems.length,1,'auto attack drops XP');
+g=fresh();g.spawn('slime',{x:80,y:0});g.player.attackClock=0;g.tick(.05);assert.equal(g.kills,0);assert(g.enemies[0].hp<g.enemies[0].maxHp,'armored slime survives one strike');
+g=fresh();g.gems.push({x:0,y:0,value:8});g.tick(.01);assert.equal(g.mode,'upgrade');assert.equal(g.level,2);assert.equal(g.choices.length,3);assert.equal(g.choose('not-offered'),false);assert(g.choose(g.choices[0].id));assert.equal(g.mode,'playing');
+g=fresh();g.addXP(100);let levels=0;while(g.mode==='upgrade'){g.choose(g.choices[0].id);levels++}assert(levels>1,'overflow XP triggers further levels');
+g=fresh();g.player.hp=60;g.mode='upgrade';g.choices=[SURVIVOR_UPGRADES.find(x=>x.id==='heart')];g.choose('heart');assert.equal(g.player.maxHp,120);assert.equal(g.player.hp,95);
+g=fresh();g.hurtPlayer(10);g.hurtPlayer(10);assert.equal(g.player.hp,90,'invulnerability prevents repeated damage');
+g=fresh();let boar=g.spawn('boar',{x:250,y:0});boar.chargeTimer=0;g.tick(.01);assert.equal(boar.charge,'warn');for(let i=0;i<80;i++)g.tick(.01);assert.equal(boar.charge,'rush');
+g=fresh();let skeleton=g.spawn('skeleton',{x:250,y:0});skeleton.fire=0;g.tick(.01);assert(g.shots.some(s=>s.kind==='arrow'&&!s.friendly),'archer fires');
+g=fresh();g.up.orb=1;g.spawn('slime',{x:300,y:0});g.tick(.01);assert(g.shots.some(s=>s.friendly),'magic fires automatically');
+g=fresh();g.time=599.99;g.tick(.02);assert(g.bossSpawned);let boss=g.enemies.find(e=>e.type==='boss');g.hurtEnemy(boss,99999);assert.equal(g.mode,'won');assert(g.drainEvents().some(e=>e.type==='end'&&e.win));
+g=fresh();g.hurtPlayer(1000);assert.equal(g.mode,'over');g.start();assert.equal(g.player.hp,100);assert.equal(g.kills,0);
+console.log('PASS: movement, pause, automatic combat, XP, chained levels, upgrades, damage protection, boar warning, ranged attacks, boss victory, defeat and restart');

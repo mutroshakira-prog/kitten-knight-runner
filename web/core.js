@@ -1,0 +1,47 @@
+(function(root){'use strict';
+const TYPES={goblin:{hp:24,speed:62,r:19,xp:2},slime:{hp:46,speed:37,r:22,xp:3},skeleton:{hp:38,speed:48,r:20,xp:4},boar:{hp:78,speed:68,r:26,xp:6},dragon:{hp:66,speed:62,r:24,xp:7},boss:{hp:1800,speed:56,r:57,xp:100}};
+const UPGRADES=[
+{id:'sword',icon:'⚔',name:'Острый меч',desc:'Урон меча +35%. Дальность +12.',max:6},
+{id:'haste',icon:'↯',name:'Быстрый взмах',desc:'Меч атакует на 15% быстрее.',max:5},
+{id:'orb',icon:'✧',name:'Звёздный огонь',desc:'Автоматический снаряд в ближайшего врага. Затем — больше снарядов.',max:4},
+{id:'blades',icon:'◈',name:'Стражи-клинки',desc:'Вращающиеся клинки защищают кошечку. Затем — больше клинков.',max:4},
+{id:'speed',icon:'➶',name:'Лёгкие сапожки',desc:'Скорость движения +12%.',max:4},
+{id:'magnet',icon:'✦',name:'Зов кристаллов',desc:'Радиус сбора опыта +40%.',max:4},
+{id:'armor',icon:'♜',name:'Крепкие доспехи',desc:'Получаемый урон −15%, минимум 1.',max:4},
+{id:'heart',icon:'♥',name:'Сила сердца',desc:'Максимальное здоровье +20. Восстановить 35 здоровья.',max:6}
+];
+class SurvivorGame{
+constructor(random=Math.random){this.random=random;this.view={w:1100,h:620};this.reset()}
+reset(){this.mode='ready';this.time=0;this.kills=0;this.level=1;this.xp=0;this.need=8;this.spawnClock=.15;this.enemies=[];this.gems=[];this.shots=[];this.effects=[];this.events=[];this.choices=[];this.bossSpawned=false;this.orbClock=0;this.bladeClock=0;this.up={};this.player={x:0,y:0,r:17,hp:100,maxHp:100,speed:180,damage:26,range:106,cooldown:.76,attackClock:.1,attack:0,face:1,inv:0,moving:false};this.nextId=1}
+start(){this.reset();this.mode='playing'}
+pause(){if(this.mode==='playing')this.mode='paused'}
+resume(){if(this.mode==='paused')this.mode='playing'}
+emit(type,data={}){this.events.push({type,...data})}
+drainEvents(){return this.events.splice(0)}
+spawn(type='goblin',position){const def=TYPES[type],p=this.player;let x,y;if(position){x=position.x;y=position.y}else{const a=this.random()*Math.PI*2,dx=Math.cos(a),dy=Math.sin(a),radius=Math.min((this.view.w/2+80)/Math.max(.001,Math.abs(dx)),(this.view.h/2+80)/Math.max(.001,Math.abs(dy)));x=p.x+dx*radius;y=p.y+dy*radius}const scaling=type==='boss'?1:1+this.time/750;const e={id:this.nextId++,type,x,y,r:def.r,hp:def.hp*scaling,maxHp:def.hp*scaling,speed:def.speed*(1+Math.min(.5,this.time/1200)),xp:def.xp,t:0,fire:1.4+this.random()*1.8,charge:'idle',chargeTimer:2+this.random()*2,dx:0,dy:0,hit:0,face:-1};this.enemies.push(e);return e}
+hurtEnemy(e,damage){if(e.hp<=0)return;e.hp-=damage;e.hit=.15;this.effects.push({kind:'number',x:e.x,y:e.y-45,t:.6,max:.6,text:String(Math.round(damage)),color:'#fff1ad'});if(e.hp<=0){this.kills++;this.gems.push({x:e.x,y:e.y,value:e.xp});this.effects.push({kind:'burst',x:e.x,y:e.y,t:.35,max:.35,color:'#e9d99a'});if(e.type==='boss'){this.mode='won';this.emit('end',{win:true})}}}
+hurtPlayer(damage){const p=this.player;if(p.inv>0||this.mode!=='playing')return;p.hp=Math.max(0,p.hp-Math.max(1,Math.round(damage*Math.pow(.85,this.up.armor||0))));p.inv=.75;this.effects.push({kind:'hit',x:p.x,y:p.y,t:.25,max:.25});if(p.hp<=0){this.mode='over';this.emit('end',{win:false})}}
+addXP(n){this.xp+=n;if(this.mode==='playing'&&this.xp>=this.need)this.levelUp()}
+levelUp(){this.xp-=this.need;this.level++;this.need=Math.round(8+Math.pow(this.level,1.3)*4);this.mode='upgrade';const pool=UPGRADES.filter(u=>(this.up[u.id]||0)<u.max);this.choices=[];while(pool.length&&this.choices.length<3){this.choices.push(pool.splice(Math.floor(this.random()*pool.length),1)[0])}if(!this.choices.length)this.choices=[{id:'heal',icon:'♥',name:'Привал',desc:'Восстановить 35 здоровья.'}];this.emit('level',{level:this.level,choices:this.choices})}
+choose(id){if(this.mode!=='upgrade'||!this.choices.some(c=>c.id===id))return false;this.up[id]=(this.up[id]||0)+1;const p=this.player;if(id==='sword'){p.damage*=1.35;p.range+=12}if(id==='haste')p.cooldown*=.85;if(id==='speed')p.speed*=1.12;if(id==='heart'){p.maxHp+=20;p.hp=Math.min(p.maxHp,p.hp+35)}if(id==='heal')p.hp=Math.min(p.maxHp,p.hp+35);this.mode='playing';this.choices=[];if(this.xp>=this.need)this.levelUp();return true}
+nearest(range=Infinity){let chosen=null,distance=range;for(const e of this.enemies){if(e.hp<=0)continue;const d=Math.hypot(e.x-this.player.x,e.y-this.player.y);if(d<distance){chosen=e;distance=d}}return chosen}
+wave(){if(this.time<15)return'Гоблины приближаются';if(this.time<40)return'Слизни окружают';if(this.time<65)return'Кабаны готовят рывок';if(this.time<95)return'Лучники выходят на охоту';if(this.time<600)return'Лесная орда наступает';return'Последний бой'}
+tick(dt,input={x:0,y:0}){if(this.mode!=='playing')return;dt=Math.min(.05,Math.max(0,dt));this.time+=dt;const p=this.player,mag=Math.hypot(input.x,input.y),div=Math.max(1,mag);p.moving=mag>.05;p.x+=input.x/div*p.speed*dt;p.y+=input.y/div*p.speed*dt;if(Math.abs(input.x)>.05)p.face=input.x>0?1:-1;p.inv=Math.max(0,p.inv-dt);p.attack=Math.max(0,p.attack-dt);p.attackClock-=dt;
+if(this.time>=600&&!this.bossSpawned){this.bossSpawned=true;this.spawn('boss');this.emit('notice',{text:'Король гоблинов! Победи его, чтобы завершить забег.'})}
+this.spawnClock-=dt;if(this.spawnClock<=0&&this.enemies.length<180){const available=['goblin'];if(this.time>15)available.push('slime');if(this.time>40)available.push('boar');if(this.time>65)available.push('skeleton');if(this.time>95)available.push('dragon');for(let i=0;i<1+Math.floor(this.time/100);i++){if(this.enemies.length>=180)break;this.spawn(available[Math.floor(this.random()*available.length)])}this.spawnClock=Math.max(.22,1.25-this.time/550)}
+if(p.attackClock<=0){const near=this.nearest(p.range);if(near){const a=Math.atan2(near.y-p.y,near.x-p.x);p.attack=.28;p.attackAngle=a;p.face=Math.cos(a)>=0?1:-1;p.attackClock=p.cooldown;this.effects.push({kind:'slash',x:p.x,y:p.y,angle:a,t:.24,max:.24,range:p.range});for(const e of this.enemies){const d=Math.hypot(e.x-p.x,e.y-p.y),angle=Math.atan2(e.y-p.y,e.x-p.x),diff=Math.abs(Math.atan2(Math.sin(angle-a),Math.cos(angle-a)));if(d<p.range+e.r&&diff<1.1){this.hurtEnemy(e,p.damage);const push=20/dt*dt;if(d>0){e.x+=(e.x-p.x)/d*push;e.y+=(e.y-p.y)/d*push}}}}}
+this.orbClock-=dt;if(this.up.orb&&this.orbClock<=0){const near=this.nearest(600);if(near){const a=Math.atan2(near.y-p.y,near.x-p.x),n=this.up.orb;for(let i=0;i<n;i++){const angle=a+(i-(n-1)/2)*.12;this.shots.push({friendly:true,kind:'orb',x:p.x,y:p.y,vx:Math.cos(angle)*370,vy:Math.sin(angle)*370,r:8,damage:26+this.level*2,t:2})}this.orbClock=1.3}}
+this.bladeClock-=dt;if(this.up.blades&&this.bladeClock<=0){const n=this.up.blades+1;for(let i=0;i<n;i++){const a=this.time*2.5+i*Math.PI*2/n,x=p.x+Math.cos(a)*75,y=p.y+Math.sin(a)*75;for(const e of this.enemies)if(Math.hypot(e.x-x,e.y-y)<e.r+18)this.hurtEnemy(e,14+this.level)}this.bladeClock=.26}
+for(const e of this.enemies){if(e.hp<=0)continue;e.t+=dt;e.hit=Math.max(0,e.hit-dt);const dx=p.x-e.x,dy=p.y-e.y,d=Math.max(1,Math.hypot(dx,dy));e.face=dx>=0?1:-1;let vx=dx/d*e.speed,vy=dy/d*e.speed;
+if(e.type==='boar'){e.chargeTimer-=dt;if(e.charge==='idle'&&e.chargeTimer<=0){e.charge='warn';e.chargeTimer=.75;e.dx=dx/d;e.dy=dy/d}if(e.charge==='warn'){vx=vy=0;if(e.chargeTimer<=0){e.charge='rush';e.chargeTimer=.65}}else if(e.charge==='rush'){vx=e.dx*390;vy=e.dy*390;if(e.chargeTimer<=0){e.charge='idle';e.chargeTimer=3}}}
+if(e.type==='skeleton'||e.type==='dragon'||e.type==='boss'){if(e.type==='skeleton'&&d<260){vx=vy=0}e.fire-=dt;if(e.fire<=0&&d<650){const n=e.type==='boss'?7:1,base=Math.atan2(dy,dx);for(let i=0;i<n;i++){const a=base+(i-(n-1)/2)*.16;this.shots.push({friendly:false,kind:e.type==='skeleton'?'arrow':'fire',x:e.x,y:e.y,vx:Math.cos(a)*210,vy:Math.sin(a)*210,r:e.type==='skeleton'?7:10,damage:e.type==='boss'?18:12,t:4})}e.fire=e.type==='boss'?2:e.type==='dragon'?2.7:3.2}}
+e.x+=vx*dt;e.y+=vy*dt;if(Math.hypot(e.x-p.x,e.y-p.y)<e.r+p.r)this.hurtPlayer(e.type==='boss'?25:e.type==='boar'?20:10)}
+// Keep crowds readable without applying expensive all-pairs separation.
+const grid=new Map();for(const e of this.enemies){if(e.hp<=0)continue;const key=Math.floor(e.x/55)+','+Math.floor(e.y/55);const peers=grid.get(key)||[];for(const b of peers){let dx=e.x-b.x,dy=e.y-b.y,d=Math.hypot(dx,dy),gap=(e.r+b.r)*.8;if(d>0&&d<gap){const push=(gap-d)*.16;e.x+=dx/d*push;e.y+=dy/d*push;b.x-=dx/d*push;b.y-=dy/d*push}}peers.push(e);grid.set(key,peers)}
+for(const s of this.shots){s.t-=dt;s.x+=s.vx*dt;s.y+=s.vy*dt;if(s.friendly){for(const e of this.enemies){if(e.hp>0&&Math.hypot(e.x-s.x,e.y-s.y)<e.r+s.r){this.hurtEnemy(e,s.damage);s.t=0;break}}}else if(Math.hypot(p.x-s.x,p.y-s.y)<p.r+s.r){this.hurtPlayer(s.damage);s.t=0}}
+const radius=92*Math.pow(1.4,this.up.magnet||0);let collected=0;for(const gem of this.gems){const dx=p.x-gem.x,dy=p.y-gem.y,d=Math.hypot(dx,dy);if(d<radius&&d>12){gem.x+=dx/d*Math.min(d,400*dt);gem.y+=dy/d*Math.min(d,400*dt)}if(d<20){collected+=gem.value;gem.dead=true}}this.gems=this.gems.filter(g=>!g.dead);if(this.gems.length>700){const oldest=this.gems.splice(0,100),value=oldest.reduce((sum,g)=>sum+g.value,0);this.gems.unshift({x:oldest[0].x,y:oldest[0].y,value})}if(collected)this.addXP(collected);
+this.enemies=this.enemies.filter(e=>e.hp>0&&Math.hypot(e.x-p.x,e.y-p.y)<2200);this.shots=this.shots.filter(s=>s.t>0);for(const f of this.effects)f.t-=dt;this.effects=this.effects.filter(f=>f.t>0);
+}
+}
+root.SurvivorGame=SurvivorGame;root.SURVIVOR_UPGRADES=UPGRADES;
+})(typeof window!=='undefined'?window:globalThis);
