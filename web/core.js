@@ -45,7 +45,30 @@ levelUp(){this.xp-=this.need;this.level++;this.need=Math.round(8+Math.pow(this.l
 choose(id){if(this.mode!=='upgrade'||!this.choices.some(c=>c.id===id))return false;this.up[id]=(this.up[id]||0)+1;const p=this.player;if(id==='sword'){p.damage*=1.35;p.range+=12}if(id==='haste')p.cooldown*=.85;if(id==='speed')p.speed*=1.12;if(id==='heart'){p.maxHp+=20;p.hp=Math.min(p.maxHp,p.hp+35)}if(id==='heal')p.hp=Math.min(p.maxHp,p.hp+35);this.mode='playing';this.choices=[];if(this.xp>=this.need)this.levelUp();return true}
 nearest(range=Infinity,from=this.player,excluded=new Set()){let chosen=null,distance=range;for(const e of this.enemies){if(e.hp<=0||excluded.has(e))continue;const d=Math.hypot(e.x-from.x,e.y-from.y);if(d<distance){chosen=e;distance=d}}return chosen}
 wave(){if(this.time>=this.nextBossAt-25&&!this.bossSpawned)return t('waveBossApproach',{biome:t(BIOMES[this.biome].nameKey)});if(this.biome===0){if(this.time<15)return t('waveGoblins');if(this.time<40)return t('waveSlimes');if(this.time<65)return t('waveBoars');if(this.time<95)return t('waveArchers')}return t(BIOMES[this.biome].waveKey||'waveBiome',{biome:t(BIOMES[this.biome].nameKey)})}
-activateSkill(direction={x:0,y:0}){if(this.mode!=='playing'||!this.activeSkill||this.skillCooldown>0)return false;const p=this.player,id=this.activeSkill,enemies=this.enemies.filter(e=>e.hp>0),near=enemies.filter(e=>Math.hypot(e.x-p.x,e.y-p.y)<330),damage=(e,n)=>this.hurtEnemy(e,n);this.skillCooldown=SKILLS[id].cooldown;this.effects.push({kind:'skill',x:p.x,y:p.y,t:.65,max:.65,color:id==='frost'?'#8eeaff':'#ffe18e'});if(id==='dash'||id==='blink'){let dx=direction.x||p.face,dy=direction.y,mag=Math.hypot(dx,dy)||1;const distance=id==='dash'?205:310;p.x+=dx/mag*distance;p.y+=dy/mag*distance;p.inv=Math.max(p.inv,id==='dash'?.9:.6);for(const e of enemies)if(Math.hypot(e.x-p.x,e.y-p.y)<100)damage(e,65)}else if(id==='shield'){this.shieldTimer=5;p.inv=Math.max(p.inv,5)}else if(id==='spin'){for(const e of near)damage(e,100)}else if(id==='fire'){for(const e of enemies)if(Math.hypot(e.x-p.x,e.y-p.y)<390){damage(e,125);e.burn=Math.max(e.burn||0,3)}}else if(id==='frost'){for(const e of enemies)if(Math.hypot(e.x-p.x,e.y-p.y)<430){damage(e,70);e.freeze=Math.max(e.freeze||0,4)}}else if(id==='lightning'){let targets=near.sort((a,b)=>Math.hypot(a.x-p.x,a.y-p.y)-Math.hypot(b.x-p.x,b.y-p.y)).slice(0,8);for(const e of targets){this.effects.push({kind:'bolt',x1:p.x,y1:p.y,x2:e.x,y2:e.y,t:.3,max:.3});damage(e,110)}}else if(id==='heal'){const restored=Math.min(50,p.maxHp-p.hp);p.hp+=restored;this.emit('notice',{text:t('skillHeal',{hp:restored})})}else if(id==='storm'){for(const e of enemies)if(Math.hypot(e.x-p.x,e.y-p.y)<560){damage(e,160);e.freeze=Math.max(e.freeze||0,1.5)}}else if(id==='cataclysm'){for(const e of enemies)damage(e,280)}this.emit('skillUsed',{skill:id});return true}
+activateSkill(direction={x:0,y:0}){
+if(this.mode!=='playing'||!this.activeSkill||this.skillCooldown>0)return false;
+const p=this.player,id=this.activeSkill,enemies=this.enemies.filter(e=>e.hp>0),near=enemies.filter(e=>Math.hypot(e.x-p.x,e.y-p.y)<330),damage=(e,n)=>this.hurtEnemy(e,n),angle=Math.atan2(direction.y||0,direction.x||p.face);
+const visual=(x=p.x,y=p.y,extra={})=>this.effects.push({kind:'skill',skill:id,x,y,angle,t:1.15,max:1.15,...extra});
+this.skillCooldown=SKILLS[id].cooldown;
+if(id==='dash'||id==='blink'){
+const ox=p.x,oy=p.y,dx=direction.x||p.face,dy=direction.y,mag=Math.hypot(dx,dy)||1;
+visual(ox,oy,{angle:Math.atan2(dy,dx)});
+const distance=id==='dash'?205:310;p.x+=dx/mag*distance;p.y+=dy/mag*distance;
+if(id==='blink')visual(p.x,p.y,{angle:Math.atan2(dy,dx)});
+p.inv=Math.max(p.inv,id==='dash'?.9:.6);for(const e of enemies)if(Math.hypot(e.x-p.x,e.y-p.y)<100)damage(e,65)
+}else{
+visual();
+if(id==='shield'){this.shieldTimer=5;p.inv=Math.max(p.inv,5)}
+else if(id==='spin'){for(const e of near)damage(e,100)}
+else if(id==='fire'){for(const e of enemies)if(Math.hypot(e.x-p.x,e.y-p.y)<390){damage(e,125);e.burn=Math.max(e.burn||0,3)}}
+else if(id==='frost'){for(const e of enemies)if(Math.hypot(e.x-p.x,e.y-p.y)<430){damage(e,70);e.freeze=Math.max(e.freeze||0,4)}}
+else if(id==='lightning'){const targets=near.sort((a,b)=>Math.hypot(a.x-p.x,a.y-p.y)-Math.hypot(b.x-p.x,b.y-p.y)).slice(0,8);for(const e of targets){this.effects.push({kind:'bolt',x1:p.x,y1:p.y,x2:e.x,y2:e.y,t:.38,max:.38});damage(e,110)}}
+else if(id==='heal'){const restored=Math.min(50,p.maxHp-p.hp);p.hp+=restored;this.emit('notice',{text:t('skillHeal',{hp:restored})})}
+else if(id==='storm'){for(const e of enemies)if(Math.hypot(e.x-p.x,e.y-p.y)<560){damage(e,160);e.freeze=Math.max(e.freeze||0,1.5)}}
+else if(id==='cataclysm'){for(const e of enemies)damage(e,280)}
+}
+this.emit('skillUsed',{skill:id});return true
+}
 tick(dt,input={x:0,y:0}){if(this.mode!=='playing')return;dt=Math.min(.05,Math.max(0,dt));this.time+=dt;const p=this.player,mag=Math.hypot(input.x,input.y),div=Math.max(1,mag);p.moving=mag>.05;p.x+=input.x/div*p.speed*dt;p.y+=input.y/div*p.speed*dt;if(Math.abs(input.x)>.05)p.face=input.x>0?1:-1;p.inv=Math.max(0,p.inv-dt);this.skillCooldown=Math.max(0,this.skillCooldown-dt);this.shieldTimer=Math.max(0,this.shieldTimer-dt);p.attack=Math.max(0,p.attack-dt);p.attackClock-=dt;
 if(this.time>=this.nextBossAt&&!this.bossSpawned){this.bossSpawned=true;const biome=BIOMES[this.biome];this.spawn(biome.bossType);this.emit('notice',{text:t('bossArrives',{name:t(biome.bossKey)})})}
 this.spawnClock-=dt;if(this.spawnClock<=0&&this.enemies.length<180){const available=['goblin'];if(this.time>15)available.push('slime');if(this.time>40)available.push('boar');if(this.time>65)available.push('skeleton');if(this.time>95)available.push('dragon');available.push(...BIOMES[this.biome].enemies);if(this.biome===1)available.push('wisp','shroom','beetle');for(let i=0;i<1+Math.floor(this.time/100);i++){if(this.enemies.length>=180)break;this.spawn(available[Math.floor(this.random()*available.length)])}this.spawnClock=Math.max(.22,1.25-this.time/550)}
