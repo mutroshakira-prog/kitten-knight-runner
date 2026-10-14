@@ -20,3 +20,4 @@ for(const language of ['ru','en','uk']){GameI18n.setLanguage(language);assert.eq
 GameI18n.setLanguage('ru');
 
 console.log('PASS: movement, pause, combat, 5% healing drops, upgrades, 10 localized biomes and bosses, super-skill rewards, defeat and restart');
+module.exports = { passed: true };
