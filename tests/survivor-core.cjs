@@ -13,4 +13,9 @@ g=fresh();let skeleton=g.spawn('skeleton',{x:250,y:0});skeleton.fire=0;g.tick(.0
 g=fresh();g.up.orb=1;g.spawn('slime',{x:300,y:0});g.tick(.01);assert(g.shots.some(s=>s.friendly),'magic fires automatically');
 g=fresh();g.time=599.99;g.tick(.02);assert(g.bossSpawned);let boss=g.enemies.find(e=>e.type==='boss');g.hurtEnemy(boss,99999);assert.equal(g.biome,1,'first boss unlocks the crystal caves');assert.equal(g.mode,'playing');let finalBoss=g.spawn('boss2',{x:500,y:500});g.hurtEnemy(finalBoss,99999);assert.equal(g.mode,'won');assert(g.drainEvents().some(e=>e.type==='end'&&e.win));
 g=fresh();g.hurtPlayer(1000);assert.equal(g.mode,'over');g.start();assert.equal(g.player.hp,100);assert.equal(g.kills,0);
-console.log('PASS: movement, pause, automatic combat, XP, chained levels, upgrades, damage protection, boar warning, ranged attacks, boss victory, defeat and restart');
+
+require('../web/i18n.js');
+for(const language of ['ru','en','uk']){GameI18n.setLanguage(language);g=fresh();g.addXP(8);assert.equal(g.mode,'upgrade');assert(g.choices.every(choice=>choice.name&&choice.desc),'localized upgrades include a name and description');if(language==='en')assert(g.choices.every(choice=>!/[А-Яа-яЁёІіЇїЄєҐґ]/.test(choice.name+choice.desc)),'English upgrade text is English')}
+GameI18n.setLanguage('ru');
+
+console.log('PASS: movement, pause, combat, healing drops, upgrades, all three locales, bosses, defeat and restart');
